@@ -1,0 +1,158 @@
+# 🦾 AIOS
+
+## Table of Contents
+
+- [🦾 AIOS](#-aios)
+	- [Table of Contents](#table-of-contents)
+	- [Features](#features)
+	- [Project Structure](#project-structure)
+	- [Prerequisites](#prerequisites)
+	- [Installation](#installation)
+	- [Configuration](#configuration)
+	- [Usage](#usage)
+		- [Chat Workflow](#chat-workflow)
+	- [Creating New Workflows](#creating-new-workflows)
+	- [Contributing](#contributing)
+	- [License](#license)
+
+## Features
+
+- Shell-based system for OS-level LLM Assistant
+- Simple, modular workflow for easy expansion and customization
+- Interactive GUI via `fzf` & `bat`
+- TUI for LLM chat
+- More to come ☀️
+
+## Project Structure
+
+```
+aios/
+├── bin/
+│   └── aios            # Main AIOS script
+├── config/
+│   ├── aios.env        # Environment variables (not in version control)
+│   └── aios.env.example # Example environment file
+├── workflows/
+│   └── chat            # Chat workflow script
+├── .gitignore
+└── README.md
+```
+
+## Prerequisites
+
+- Bash/Zsh Command Line Environment
+- `fzf` for fuzzy finding
+- `bat` for output formatting
+- `llm` CLI
+
+## Installation
+
+1. Clone this repository:
+
+   ```bash
+   git clone https://github.com/yourusername/aios.git ~/projects/aios
+   ```
+
+2. Create a symlink to make AIOS accessible from anywhere:
+
+   ```bash
+   ln -s ~/projects/aios/bin/aios ~/.local/bin/aios
+   ```
+
+3. Ensure `~/.local/bin` is in your PATH. Add the following line to your `~/.bashrc` or `~/.zshrc`:
+
+   ```bash
+   export PATH="$HOME/.local/bin:$PATH"
+   ```
+
+4. Source your updated rc file or restart your terminal.
+
+## Configuration
+
+1. Copy the example environment file:
+
+   ```bash
+   cp ~/projects/aios/config/aios.env.example ~/projects/aios/config/aios.env
+   ```
+
+2. Edit `~/projects/aios/config/aios.env` and set your configuration variables:
+
+   ```bash
+   OPENAI_API_KEY=your_api_key_here
+   # Add any other configuration variables
+   ```
+
+## Usage
+
+1. Run AIOS:
+
+   ```bash
+   aios
+   ```
+
+2. Use the fuzzy finder to select a workflow.
+
+3. Follow the prompts for the selected workflow.
+
+### Chat Workflow
+
+The default chat workflow provides an interactive interface to communicate with an LLM:
+
+- Enter your messages at the prompt.
+- The LLM's responses will be displayed with formatting.
+- Type `q` to exit the chat workflow.
+
+## Creating New Workflows
+
+1. Create a new script in the `workflows/` directory:
+
+   ```bash
+   touch ~/projects/aios/workflows/my_new_workflow
+   chmod +x ~/projects/aios/workflows/my_new_workflow
+   ```
+
+2. Edit the new workflow script, starting with:
+
+   ```bash
+   #!/bin/bash
+   # ~/projects/aios/workflows/my_new_workflow
+
+   # Function to output system messages
+   system_msg() {
+       echo "$@" >&3
+   }
+
+   # Function to output debug messages
+   debug_msg() {
+       echo "$@" >&4
+   }
+
+   # Your workflow logic here
+   main() {
+       system_msg "Starting My New Workflow"
+       # ...
+   }
+
+   # Set up file descriptors
+   exec 3>&1
+   exec 4>/dev/null
+
+   # Run the main function
+   main "$@"
+
+   # Clean up file descriptors
+   exec 3>&-
+   exec 4>&-
+   ```
+
+3. Implement your workflow logic in the `main` function.
+
+4. The new workflow will now be available when running `aios`.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
