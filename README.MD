@@ -1,39 +1,26 @@
-# 🦾 AIOS
+# 🐚 SheLLM (WIP)
 
 ## Table of Contents
 
-- [🦾 AIOS](#-aios)
-	- [Table of Contents](#table-of-contents)
-	- [Features](#features)
-	- [Project Structure](#project-structure)
-	- [Prerequisites](#prerequisites)
-	- [Installation](#installation)
-	- [Configuration](#configuration)
-	- [Usage](#usage)
-		- [Chat Workflow](#chat-workflow)
-	- [Creating New Workflows](#creating-new-workflows)
-	- [Contributing](#contributing)
-	- [License](#license)
+Pronounced "shell-ell-em".
 
 ## Features
 
-- Shell-based system for OS-level LLM Assistant
-- Simple, modular workflow for easy expansion and customization
-- Interactive GUI via `fzf` & `bat`
-- TUI for LLM chat
-- More to come ☀️
+- Shell-based framework for LLM Assistants
+- Simple, modular, customizable
+- Leverages `fzf`, `bat`, `tmux`, etc.
+- Sexy `bat`-powered TUI for LLM chat
 
-## Project Structure
+## Structure
 
 ```
-aios/
+shellm/
 ├── bin/
-│   └── aios            # Main AIOS script
+│   └── shellm           # Top level executable
 ├── config/
-│   ├── aios.env        # Environment variables (not in version control)
-│   └── aios.env.example # Example environment file
+│   └── shellm.env.example # Example environment file
 ├── workflows/
-│   └── chat            # Chat workflow script
+│   └── chat            # LLM Chat TUI
 ├── .gitignore
 └── README.md
 ```

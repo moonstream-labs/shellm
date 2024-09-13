@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ~/.local/bin/aios
+# ~/.local/bin/shellm
 
 # Define configuration directories and files
 CONFIG_DIR="$HOME/aios/config"

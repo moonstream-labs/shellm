@@ -1,24 +1,24 @@
 #!/bin/bash
-# ~/.config/aios/flows/chat
+# ~/.config/shellm/flows/chat
 
 # Streaming output via bat
-bat_stream() {
+batstream() {
 	bat --color=always \
 		--wrap=character \
 		--unbuffered \
 		--file-name "LlamaResponse.md" \
 		--theme "TwoDark" \
 		--tabs=4 \
-		--style "numbers,grid,header-filename" \
 		--paging=never \
+		--style "numbers,grid,header-filename" \
 		--pager "less --RAW-CONTROL-CHARS --quit-if-one-screen --mouse"
 
 }
 
-# Interact with CLI from Shell, Route output to bat
+# Interacts with `llm` CLI API, Streams output via `bat`
 chat_with_llm() {
 	local input="$1"
-	llm <<<"$input" -c | bat_stream
+	llm <<<"$input" -c | batstream
 }
 
 # Read initial input
