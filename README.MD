@@ -6,7 +6,7 @@ Pronounced "shell-ell-em".
 
 ## Features
 
-- Shell-based framework for LLM Assistants
+- Shell-based framework for OS LLM Workflows
 - Simple, modular, customizable
 - Leverages `fzf`, `bat`, `tmux`, etc.
 - Sexy `bat`-powered TUI for LLM chat
