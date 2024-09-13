@@ -15,15 +15,15 @@ load_env() {
 	fi
 }
 
-# Output system messages to file descriptor 3
-system_msg() {
-	echo "$@" >&3
-}
+# # Output system messages to file descriptor 3
+# system_msg() {
+# 	echo "$@" >&3
+# }
 
-# Output debug messages to file descriptor 4
-debug_msg() {
-	echo "$@" >&4
-}
+# # Output debug messages to file descriptor 4
+# debug_msg() {
+# 	echo "$@" >&4
+# }
 
 # Use fzf to select a workflow from the workflows directory
 select_workflow() {
@@ -36,7 +36,7 @@ main() {
 	load_env
 	# Select a workflow using fzf
 	workflow=$(select_workflow)
-	system_msg "Selected workflow: $workflow"
+	# system_msg "Selected workflow: $workflow"
 	# Execute the selected workflow in a subshell
 	(
 		bash "$WORKFLOWS_DIR/$workflow"
@@ -44,12 +44,12 @@ main() {
 }
 
 # Set up file descriptors for system and debug messages
-exec 3>&1        # System messages to stdout by default
-exec 4>/dev/null # Discard debug messages by default
+# exec 3>&1        # System messages to stdout by default
+# exec 4>/dev/null # Discard debug messages by default
 
 # Run the main function
 main "$@"
 
 # Clean up file descriptors
-exec 3>&-
-exec 4>&-
+# exec 3>&-
+# exec 4>&-
