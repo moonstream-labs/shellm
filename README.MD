@@ -1,15 +1,13 @@
 # 🐚 SheLLM (WIP)
 
-## Table of Contents
-
 Pronounced "shell-ell-em".
 
 ## Features
 
 - Shell-based framework for OS LLM Workflows
 - Simple, modular, customizable
-- Leverages `fzf`, `bat`, `tmux`, etc.
-- Sexy `bat`-powered TUI for LLM chat
+- Leverages familiar favorites like `fzf`, `bat`, `tmux`, and more
+- Sexy `bat`-powered TUI for LLM chat w/ syntax highlighting, line numbers, etc.
 
 ## Structure
 
@@ -18,7 +16,7 @@ shellm/
 ├── bin/
 │   └── shellm           # Top level executable
 ├── config/
-│   └── shellm.env.example # Example environment file
+│   └── .env.example # Example environment file
 ├── workflows/
 │   └── chat            # LLM Chat TUI
 ├── .gitignore
@@ -71,75 +69,8 @@ shellm/
 
 ## Usage
 
-1. Run AIOS:
+1. Run `shellm`:
 
    ```bash
-   aios
+   shellm
    ```
-
-2. Use the fuzzy finder to select a workflow.
-
-3. Follow the prompts for the selected workflow.
-
-### Chat Workflow
-
-The default chat workflow provides an interactive interface to communicate with an LLM:
-
-- Enter your messages at the prompt.
-- The LLM's responses will be displayed with formatting.
-- Type `q` to exit the chat workflow.
-
-## Creating New Workflows
-
-1. Create a new script in the `workflows/` directory:
-
-   ```bash
-   touch ~/projects/aios/workflows/my_new_workflow
-   chmod +x ~/projects/aios/workflows/my_new_workflow
-   ```
-
-2. Edit the new workflow script, starting with:
-
-   ```bash
-   #!/bin/bash
-   # ~/projects/aios/workflows/my_new_workflow
-
-   # Function to output system messages
-   system_msg() {
-       echo "$@" >&3
-   }
-
-   # Function to output debug messages
-   debug_msg() {
-       echo "$@" >&4
-   }
-
-   # Your workflow logic here
-   main() {
-       system_msg "Starting My New Workflow"
-       # ...
-   }
-
-   # Set up file descriptors
-   exec 3>&1
-   exec 4>/dev/null
-
-   # Run the main function
-   main "$@"
-
-   # Clean up file descriptors
-   exec 3>&-
-   exec 4>&-
-   ```
-
-3. Implement your workflow logic in the `main` function.
-
-4. The new workflow will now be available when running `aios`.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
