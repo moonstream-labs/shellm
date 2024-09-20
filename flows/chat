@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # ~/.config/shellm/flows/chat
 
 # Streaming output via bat and saving to a temporary file

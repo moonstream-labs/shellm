@@ -4,18 +4,20 @@ Pronounced "shell-ell-em".
 
 ## Features
 
-- Shell-based utilities for LLM workflows
+- Command-line utilities for LLM workflows
 - Simple, modular, fast
-- Leverages command-line all-stars like `fzf`, `bat`, `tmux`, etc.
-- Sexy TUI for LLM chat (powered by [`llm`](https://github.com/simonw/llm), `bat`, & `fzf`)
+- Leverages command-line all-stars like `fzf`, `bat`, etc.
+- Lo-Fi LLM chat (powered by `jq`, `bat`, & `fzf`)
+  - Anthropic API support
   - Syntax highlighting
   - Line numbers
-  - Scrolling
+  - Chat Scrolling
   - Chat Search via `rg` (Coming Soon)
-  - Local DB Sync for Chat History (Coming Soon)
-- XML Tagging Utilities
-  - `xcp`
+  - Local DB Sync for Chat Output (Coming Soon)
+- XML Tag Machine
+  - `xcp` - v1 XML Tagging Utility
 - Embedding Workflows (Coming Soon)
+- LLM-Powered Commit Messages (Coming Soon)
 
 ## Structure
 
@@ -43,7 +45,7 @@ shellm/
 - Bash/Zsh Command Line Environment
 - `fzf` for fuzzy finding
 - `bat` for output formatting
-- `llm` CLI
+- `jq` for LLM stream parsing
 
 ## Installation
 
@@ -56,7 +58,7 @@ shellm/
 2. Create a symlink to make `shellm` accessible from anywhere:
 
    ```bash
-   ln -s ~/projects/aios/bin/aios ~/.local/bin/aios
+   ln -s ~/projects/shellm/bin/shellm ~/.local/bin/shellm
    ```
 
 3. Ensure `~/.local/bin` is in your PATH. Add the following line to your `~/.bashrc` or `~/.zshrc`:
@@ -82,7 +84,7 @@ shellm/
 2. Edit `~/projects/shellm/config/.env` and set your configuration variables:
 
    ```bash
-   OPENAI_API_KEY=your_api_key_here
+   ANTHROPIC_API_KEY=your_api_key_here
    # Add any other configuration variables
    ```
 
