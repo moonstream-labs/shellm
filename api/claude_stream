@@ -1,0 +1,61 @@
+#!/bin/bash
+
+bat_stream() {
+	bat --color=always \
+		--wrap=character \
+		--unbuffered \
+		--file-name "ClaudeStream.md" \
+		--theme "TwoDark" \
+		--tabs=4 \
+		--paging=never \
+		--pager "less --RAW-CONTROL-CHARS --quit-if-one-screen --mouse" \
+		--style "numbers,grid,header-filename"
+}
+
+
+claude_raw_stream() {
+    local env_file="../config/.env"
+    if [ -f "$env_file" ]; then
+        set -a
+        . "$env_file"
+        set +a
+    else
+        echo ".env file not found at $env_file" >&2
+        return 1
+    fi
+
+    if [ -z "$ANTHROPIC_API_KEY" ]; then
+        echo "ANTHROPIC_API_KEY is not set in .env file" >&2
+        return 1
+    fi
+
+    local message="$1"
+    local max_tokens="${2:-1024}"
+
+    curl -N -s https://api.anthropic.com/v1/messages \
+        --header "x-api-key: $ANTHROPIC_API_KEY" \
+        --header "anthropic-version: 2023-06-01" \
+        --header "content-type: application/json" \
+        --header "accept: text/event-stream" \
+        --data @- <<EOF
+{
+    "model": "claude-3-haiku-20240307",
+    "max_tokens": $max_tokens,
+    "stream": true,
+    "messages": [
+        {"role": "user", "content": "$message"}
+    ]
+}
+EOF
+}
+
+# Check if a message is provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <message> [max_tokens]" >&2
+    exit 1
+fi
+
+# output_file="./tests/format_test.json"
+
+# Call the function with the provided message and optional max_tokens
+claude_raw_stream "$1" "$2" | claude_parse | bat_stream

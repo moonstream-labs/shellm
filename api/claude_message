@@ -1,0 +1,51 @@
+#!/bin/sh
+
+claude_request() {
+    local env_file="./config/.env"
+    if [ -f "$env_file" ]; then
+        set -a
+        . "$env_file"
+        set +a
+    else
+        echo ".env file not found at $env_file"
+        return 1
+    fi
+
+    # Check if ANTHROPIC_API_KEY is set
+    if [ -z "$ANTHROPIC_API_KEY" ]; then
+        echo "ANTHROPIC_API_KEY is not set in .env file"
+        return 1
+    fi
+
+    # Function to send a message to Claude and parse the response
+    local message="$1"
+    local max_tokens="${2:-1024}" # Default to 1024 if not provided
+
+    response=$(
+        curl -s https://api.anthropic.com/v1/messages \
+            --header "x-api-key: $ANTHROPIC_API_KEY" \
+            --header "anthropic-version: 2023-06-01" \
+            --header "content-type: application/json" \
+            --data @- <<EOF
+{
+    "model": "claude-3-haiku-20240307",
+    "max_tokens": $max_tokens,
+    "messages": [
+        {"role": "user", "content": "$message"}
+    ]
+}
+EOF
+    )
+
+    # Parse the response with jq
+    echo "$response"
+}
+
+# Check if a message is provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <message> [max_tokens]"
+    exit 1
+fi
+
+# Call the function with the provided message and optional max_tokens
+claude_request "$1" "$2"

@@ -1,0 +1,51 @@
+#!/bin/bash
+
+process_sse_line() {
+    local line="$1"
+    
+    # Remove leading whitespace
+    line="${line#"${line%%[![:space:]]*}"}"
+    
+    # Process data lines
+    if [[ "$line" == data:* ]]; then
+        # Extract JSON content
+        json_content="${line#data: }"
+        
+        # Parse and process the JSON content
+        echo "$json_content" | jq -r '
+            if .type == "content_block_delta" then
+                ["content", .delta.text]
+            elif .type == "message_delta" then
+                ["tokens", (.usage.output_tokens | tostring)]
+            elif .type == "message_start" then
+                ["id", .message.id]
+            elif .type == "message_stop" then
+                ["complete", "Message Completed"]
+            else
+                ["unknown", ""]
+            end | @tsv
+        '
+    fi
+}
+
+# Main execution
+while IFS= read -r line; do
+    result=$(process_sse_line "$line")
+    if [ -n "$result" ]; then
+        IFS=$'\t' read -r type text <<< "$result"
+        case "$type" in
+            "content")
+                printf '%b' "$text"
+                ;;
+            "tokens")
+                printf '\n\nOutput Tokens: %s\n' "$text"
+                ;;
+            "id")
+                printf 'Message Start ID: %s\n\n' "$text"
+                ;;
+            "complete")
+                printf '\n%s\n' "$text"
+                ;;
+        esac
+    fi
+done
