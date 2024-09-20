@@ -6,8 +6,12 @@ Pronounced "shell-ell-em".
 
 - Shell-based framework for OS LLM Workflows
 - Simple, modular, customizable
-- Leverages familiar favorites like `fzf`, `bat`, `tmux`, and more
-- Sexy `bat`-powered TUI for LLM chat w/ syntax highlighting, line numbers, etc.
+- Leverages command-line all-stars like `fzf`, `bat`, `tmux`, etc.
+- Sexy TUI for LLM chat (powered by [`llm`](https://github.com/simonw/llm), `bat`, & `fzf`)
+  - Syntax highlighting
+  - Line numbers
+  - Scrolling
+  - Search (Coming Soon)
 
 ## Structure
 

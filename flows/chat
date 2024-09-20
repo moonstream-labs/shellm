@@ -1,8 +1,8 @@
 #!/bin/bash
 # ~/.config/shellm/flows/chat
 
-# Streaming output via bat
-batstream() {
+# Streaming output via bat and saving to a temporary file
+bat_stream() {
 	bat --color=always \
 		--wrap=character \
 		--unbuffered \
@@ -10,15 +10,14 @@ batstream() {
 		--theme "TwoDark" \
 		--tabs=4 \
 		--paging=never \
-		--style "numbers,grid,header-filename" \
-		--pager "less --RAW-CONTROL-CHARS --quit-if-one-screen --mouse"
-
+		--pager "less --RAW-CONTROL-CHARS --quit-if-one-screen --mouse" \
+		--style "numbers,grid,header-filename"
 }
 
-# Interacts with `llm` CLI API, Streams output via `bat`
+# Interacts with `llm` CLI API, Streams output via `bat_stream_and_save`
 chat_with_llm() {
 	local input="$1"
-	llm <<<"$input" -c | batstream
+	llm <<<"$input" -c | bat_stream
 }
 
 # Read initial input
@@ -29,11 +28,14 @@ chat_with_llm "$input"
 
 # Main chat loop for continuous interaction with the LLM
 while true; do
-	read -r input
+	read -r command
 
-	if [[ $input == "q" ]]; then
+	if [[ $command == "q" ]]; then
 		break
+	else
+		chat_with_llm "$command"
 	fi
-
-	chat_with_llm "$input"
 done
+
+# Clean up temporary file
+rm /tmp/_output

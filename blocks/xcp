@@ -1,0 +1,162 @@
+#!/bin/bash
+
+set -eo pipefail
+
+# Get the real path of the script
+SCRIPT_PATH="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+usage() {
+    cat << EOF
+Usage: xcp [options] <file_path> [custom_value] [output_directory]
+
+Description: Wraps the content of the specified file in XML tags,
+sets an attribute, and copies the tagged content to the clipboard.
+If the -s option is provided, it also saves the tagged file to the specified location using a '.xml' extension.
+
+Options:
+  -s                   Save the tagged file (in addition to copying to clipboard)
+  -t <tag> [attr]      Specify custom tag type and optional attribute name (requires custom_value)
+  -h, --help           Display this help message and exit
+
+Examples:
+  1. Copy tagged file to clipboard:
+     xcp /path/to/file.txt
+
+  2. Copy tagged file to clipboard with custom value:
+     xcp /path/to/file.txt "CustomValue"
+
+  3. Save tagged file to current directory and copy to clipboard:
+     xcp -s /path/to/file.txt
+     
+  4. Save tagged file with custom value to current directory and copy to clipboard:
+     xcp -s /path/to/file.txt "CustomValue"
+
+  5. Save tagged file to specified directory and copy to clipboard:
+     xcp -s /path/to/file.txt /path/to/output/directory
+
+  6. Save tagged file with custom value to specified directory and copy to clipboard:
+     xcp -s /path/to/file.txt "CustomValue" /path/to/output/directory
+
+  7. Use custom tag type (requires custom value):
+     xcp -t "review" /path/to/file.txt "CustomValue"
+
+  8. Use custom tag type with custom attribute (requires custom value):
+     xcp -t "review" "type" /path/to/file.txt "CustomValue"
+
+  9. Use custom tag type, save file, and copy to clipboard:
+     xcp -s -t "review" /path/to/file.txt "CustomValue" [output_directory]
+
+  10. Use custom tag type with custom attribute, save file, and copy to clipboard:
+     xcp -s -t "review" "type" /path/to/file.txt "CustomValue" [output_directory]
+
+EOF
+    exit 0
+}
+
+error_exit() {
+    echo "Shit! ($1)" >&2
+    exit 1
+}
+
+tag_file_content() {
+    local file_path="$1"
+    local tag_type="$2"
+    local attr_name="$3"
+    local attr_value="$4"
+    echo "<$tag_type $attr_name=\"$attr_value\">"
+    cat "$file_path"
+    echo "</$tag_type>"
+}
+
+generate_success_message() {
+    local name="$1"
+    local action="$2"
+    local location="$3"
+    echo "Success! $name $action $location!"
+}
+
+save_option=false
+tag_type="file"
+attr_name="name"
+file_path=""
+custom_value=""
+output_dir=""
+
+# Parse options
+while getopts ":st:h-:" opt; do
+    case $opt in
+        s)
+            save_option=true
+            ;;
+        t)
+            tag_type="$OPTARG"
+            if [ $# -gt $OPTIND ] && [[ ${!OPTIND} != -* ]]; then
+                attr_name="${!OPTIND}"
+                OPTIND=$((OPTIND + 1))
+            fi
+            ;;
+        h)
+            usage
+            ;;
+        -)
+            case "${OPTARG}" in
+                help)
+                    usage
+                    ;;
+                *)
+                    error_exit "Invalid option: --${OPTARG}"
+                    ;;
+            esac
+            ;;
+        \?)
+            error_exit "Invalid option: -$OPTARG"
+            ;;
+    esac
+done
+
+# Shift the options out of the argument list
+shift $((OPTIND-1))
+
+file_path="$1"
+[ -z "$file_path" ] && error_exit "I can't find the file! Try again.."
+[ ! -f "$file_path" ] && error_exit "'$file_path' doesn't exist! Try again..."
+[ ! -r "$file_path" ] && error_exit "I can't read '$file_path'! Try again..."
+
+shift
+
+if [ "$tag_type" != "file" ]; then
+    [ $# -lt 1 ] && error_exit "Custom tag requires a custom value. Try again.."
+    custom_value="$1"
+    shift
+else
+    custom_value="$(basename "$file_path")"
+    [ $# -gt 0 ] && custom_value="$1" && shift
+fi
+
+if $save_option; then
+    if [ $# -eq 0 ]; then
+        output_dir="$(pwd)"
+    elif [ $# -eq 1 ]; then
+        output_dir="$1"
+    else
+        usage
+    fi
+    output_filename="${custom_value}.xml"
+fi
+
+# Create temporary file
+temp_file=$(mktemp)
+trap 'rm -f "$temp_file"' EXIT
+
+# Tag file content and copy to clipboard
+tag_file_content "$file_path" "$tag_type" "$attr_name" "$custom_value" > "$temp_file"
+pbcopy < "$temp_file" || error_exit "Can't copy file to clipboard. Try again..."
+
+if $save_option; then
+    mkdir -p "$output_dir" || error_exit "Can't create output directory. Try again..."
+    cp "$temp_file" "$output_dir/$output_filename" || error_exit "Can't save the file. Try again..."
+    generate_success_message "$(basename "$output_filename")" "saved to" "$(basename "$output_dir") and copied to clipboard"
+else
+    generate_success_message "${custom_value}" "copied to" "clipboard"
+fi

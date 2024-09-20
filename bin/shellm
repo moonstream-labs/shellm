@@ -2,9 +2,9 @@
 # ~/.local/bin/shellm
 
 # Define configuration directories and files
-CONFIG_DIR="$HOME/aios/config"
-ENV_FILE="$CONFIG_DIR/aios.env"
-WORKFLOWS_DIR="$HOME/aios/flows"
+CONFIG_DIR="$HOME/shellm/config"
+ENV_FILE="$CONFIG_DIR/.env"
+WORKFLOWS_DIR="$HOME/shellm/flows"
 
 # Load environment variables from the .env file
 load_env() {
