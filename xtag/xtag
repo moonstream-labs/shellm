@@ -1,0 +1,69 @@
+#!/bin/zsh
+# xtag
+# Current Working Version
+
+set -eo pipefail
+
+SCRIPT_PATH="${0:A}"
+SCRIPT_DIR="${SCRIPT_PATH:h}"
+
+# Source the other script files
+source "$SCRIPT_DIR/core.sh"
+source "$SCRIPT_DIR/utils.sh"
+source "$SCRIPT_DIR/output.sh"
+
+# Main script logic
+main() {
+    local tag_type=""
+    local num_items=1
+    local save_path=""
+    local multi_save_dir=""
+    local verbose=false
+
+    # Parse options
+    while getopts ":ixfbd:e:c:r:s:m:tvh" opt; do
+        case $opt in
+            i) tag_type="instructions" ;;
+            x) tag_type="context" ;;
+            f) tag_type="filetree" ;;
+            b) tag_type="codebase" ;;
+            d) tag_type="document"; num_items=${OPTARG:-1} ;;
+            e) tag_type="example"; num_items=${OPTARG:-1} ;;
+            c) tag_type="code"; num_items=${OPTARG:-1} ;;
+            r) tag_type="reasoning"; num_items=${OPTARG:-1} ;;
+            s) save_path="$OPTARG" ;;
+            m) multi_save_dir="$OPTARG" ;;
+            t) # Custom tag template logic (to be implemented)
+               ;;
+            v) verbose=true ;;
+            h) usage ;;
+            \?) error_exit "Invalid option: -$OPTARG" ;;
+            :) error_exit "Option -$OPTARG requires an argument." ;;
+        esac
+    done
+
+    shift $((OPTIND-1))
+
+    # Check if a tag type was specified
+    if [[ -z "$tag_type" ]]; then
+        usage
+        exit 1
+    fi
+
+    # Generate tag structure
+    make_xtags "$tag_type" "$num_items"
+
+    # If files are provided, process them
+    if [[ $# -gt 0 ]]; then
+        fill_tags "$tag_type" "$num_items" "$@"
+    fi
+
+    # Generate output
+    local output=$(make_xtags "$tag_type" "$num_items")
+
+    # Handle output
+    handle_output "$output" "$save_path" "$multi_save_dir" "$verbose"
+}
+
+# Run the main function
+main "$@"
