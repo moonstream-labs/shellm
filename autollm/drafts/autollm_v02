@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+### autollm v2.0 ###
+
+# Configuration
+CONFIG_DIR="$HOME/.config/autollm"
+ENV_FILE="$CONFIG_DIR/autollm.env"
+WORKFLOWS_DIR="$CONFIG_DIR/workflows"
+TEMPLATES_DIR="$CONFIG_DIR/templates"
+
+# Function to load .env file
+load_env() {
+	if [ -f "$ENV_FILE" ]; then
+		export $(grep -v '^#' "$ENV_FILE" | xargs)
+	fi
+}
+
+# Load .env file
+load_env
+
+# Function to select workflow using fzf
+select_workflow() {
+	echo "$(find "$WORKFLOWS_DIR" -type f -name "*.sh" | xargs -n 1 basename -s .sh | fzf --prompt="Select workflow: ")"
+}
+
+# Function to select llm template using fzf
+select_template() {
+	echo "$(llm templates | cut -d ':' -f 1 | fzf --prompt="Select llm template: ")"
+}
+
+# Function to select root directory using fzf
+select_root_dir() {
+	echo "$(find . -type d | fzf --prompt="Select root directory: ")"
+}
+
+# Function to select globbing pattern
+select_glob_pattern() {
+	local patterns=("*.md" "*.txt" "*.py" "*.js" "*.html" "*.css" "Generate pattern")
+	local pattern=$(printf "%s\n" "${patterns[@]}" | fzf --prompt="Select globbing pattern: ")
+
+	if [ "$pattern" = "Generate pattern" ]; then
+		echo "Describe the desired globbing pattern:"
+		read -r description
+		pattern=$(llm "Generate a globbing pattern based on this description: $description. Return ONLY the globbing pattern, nothing else." --system "You are a helpful assistant that generates precise globbing patterns based on user descriptions. Always return ONLY the globbing pattern, with no additional text or explanations.")
+		echo "Generated pattern: $pattern"
+	fi
+
+	echo "$pattern"
+}
+
+# Main script
+echo "Welcome to autollm CLI"
+
+# Select workflow
+workflow=$(select_workflow)
+echo "Selected workflow: $workflow"
+
+# Select llm template
+template=$(select_template)
+echo "Selected llm template: $template"
+
+# Select root directory
+root_dir=$(select_root_dir)
+echo "Selected root directory: $root_dir"
+
+# Select globbing pattern
+glob_pattern=$(select_glob_pattern)
+echo "Selected globbing pattern: $glob_pattern"
+
+# Execute the selected workflow
+source "$WORKFLOWS_DIR/$workflow.sh"
+
+echo "autollm execution complete!"

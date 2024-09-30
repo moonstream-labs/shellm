@@ -1,0 +1,36 @@
+#!/bin/bash
+# ~/.config/autollm/workflows/batchat
+
+# streaming output via bat
+batchat() {
+	bat --color=always \
+		--unbuffered \
+		--theme="base16" \
+		--tabs=4 \
+		--style="numbers,grid,snip" \
+		--paging=never \
+		--language=markdown
+}
+
+chat_with_llm() {
+	local input="$1"
+	llm chat <<<"$input" | batchat
+}
+
+echo -e "\n\033[1m🦾  batchat  🦾\033[0m\n"
+read -r input
+
+chat_with_llm "$input"
+
+# Main chat loop for subsequent messages
+while true; do
+	read -r input
+
+	# Check for quit command
+	if [[ $input == "q" ]]; then
+		break
+	fi
+
+	chat_with_llm "$input"
+
+done
