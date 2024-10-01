@@ -6,17 +6,15 @@ handle_output() {
     local content="$1"
     local save_path="$2"
     local multi_save_dir="$3"
-    local verbose="$4"
 
     if [[ -n "$save_path" ]]; then
         save_single_file "$content" "$save_path"
-        $verbose && echo "Output saved to $save_path"
+        print "Output saved to $save_path"
     elif [[ -n "$multi_save_dir" ]]; then
         save_multiple_files "$content" "$multi_save_dir"
-        $verbose && echo "Output saved as multiple files in $multi_save_dir"
+        print "Output saved as multiple files in $multi_save_dir"
     else
-        echo "$content" | pbcopy
-        $verbose && echo "Output copied to clipboard"
+        print -n "$content" | pbcopy
     fi
 }
 
@@ -24,7 +22,7 @@ handle_output() {
 save_single_file() {
     local content="$1"
     local save_path="$2"
-    echo "$content" > "$save_path"
+    print -n "$content" > "$save_path"
 }
 
 # Save output as multiple files
@@ -41,7 +39,7 @@ save_multiple_files() {
 
     mkdir -p "$examples_dir"
 
-    echo "$content" | awk '
+    print -n "$content" | awk '
     /<(example|document|file)[ >]/,/<\/(example|document|file)>/ {
         if ($0 ~ /<(example|document|file)[ >]/) {
             close(file);

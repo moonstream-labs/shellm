@@ -1,4 +1,4 @@
-# xtag Guide
+# xtag
 
 This guide provides a detailed overview of the `xtag` script, its components, and how they work together to generate XML tags and process files.
 

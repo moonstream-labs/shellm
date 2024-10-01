@@ -18,25 +18,43 @@ main() {
     local num_items=1
     local save_path=""
     local multi_save_dir=""
-    local verbose=false
-
+    
+    # Check for --help option before getopts
+    for arg in "$@"; do
+        if [[ "$arg" == "--help" ]]; then
+            usage
+            exit 0
+        fi
+    done
+    
     # Parse options
-    while getopts ":ixfbd:e:c:r:s:m:tvh" opt; do
+    while getopts ":ixfvbd:e:c:r:s:m:th" opt; do
         case $opt in
             i) tag_type="instructions" ;;
             x) tag_type="context" ;;
-            f) tag_type="filetree" ;;
+            f) tag_type="repomap" ;;
+            v) tag_type="version" ;;
             b) tag_type="codebase" ;;
             d) tag_type="document"; num_items=${OPTARG:-1} ;;
-            e) tag_type="example"; num_items=${OPTARG:-1} ;;
+            e)
+    			tag_type="example"
+    			num_items=${OPTARG:-1}
+    			if [[ ${@[$OPTIND]} != -* && -n ${@[$OPTIND]} ]]; then
+    			    meta=${@[$OPTIND]}
+    			    OPTIND=$((OPTIND+1))
+    			else
+    			    meta=""
+    			fi
+    			;;
             c) tag_type="code"; num_items=${OPTARG:-1} ;;
             r) tag_type="reasoning"; num_items=${OPTARG:-1} ;;
             s) save_path="$OPTARG" ;;
             m) multi_save_dir="$OPTARG" ;;
-            t) # Custom tag template logic (to be implemented)
+			p) # <dependencies> tag (to be implemented)
+			   ;;
+            t) # Custom tag (to be implemented)
                ;;
-            v) verbose=true ;;
-            h) usage ;;
+            h) usage; exit 0 ;;
             \?) error_exit "Invalid option: -$OPTARG" ;;
             :) error_exit "Option -$OPTARG requires an argument." ;;
         esac
@@ -45,24 +63,19 @@ main() {
     shift $((OPTIND-1))
 
     # Check if a tag type was specified
-    if [[ -z "$tag_type" ]]; then
-        usage
-        exit 1
-    fi
-
-    # Generate tag structure
-    make_xtags "$tag_type" "$num_items"
+    [[ -z "$tag_type" ]] && error_exit "No tag type specified"
 
     # If files are provided, process them
     if [[ $# -gt 0 ]]; then
         fill_tags "$tag_type" "$num_items" "$@"
+        # Regenerate output with filled content
     fi
 
-    # Generate output
+	# Generate output after filling tags
     local output=$(make_xtags "$tag_type" "$num_items")
 
     # Handle output
-    handle_output "$output" "$save_path" "$multi_save_dir" "$verbose"
+    handle_output "$output" "$save_path" "$multi_save_dir"
 }
 
 # Run the main function

@@ -32,8 +32,7 @@ Options:
   -r [n]        <step> tags within <reasoning>, n is # of steps (default: 1)
   -s [path]     save output to file path (default: clipboard)
   -m [dir]      save output as multiple files in directory (default: current directory)
-  -v            Verbose mode (provide detailed output)
-  -h, --help    Display help message and exit
+  -h, --help    Display this help message and exit
 
 Examples:
   xtag -i                            # Generate <instructions> template
