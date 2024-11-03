@@ -1,23 +1,184 @@
 #!/bin/zsh
-# xtag
-# Current Working Version
+# xtag v1 - XML Tag Generation Utility
+# Generates structured XML tags for documentation, code representation, and reasoning
+# Usage: xtag [options] [file ...]
 
+#------------------------------------------------------------------------------
+# Configuration and Environment Setup
+#------------------------------------------------------------------------------
 set -eo pipefail
 
-SCRIPT_PATH="${0:A}"
-SCRIPT_DIR="${SCRIPT_PATH:h}"
+# Global associative array for storing tag data
+typeset -gA TAG_DATA
 
-# Source the other script files
-source "$SCRIPT_DIR/core.sh"
-source "$SCRIPT_DIR/utils.sh"
-source "$SCRIPT_DIR/output.sh"
+#------------------------------------------------------------------------------
+# Help and Usage Information
+#------------------------------------------------------------------------------
+usage() {
+    cat <<EOF
+Usage: xtag [options] [file ...]
 
-# Main script logic
+Description: Generates XML tags for various purposes such as documentation, code representation, and reasoning. 
+The generated content is copied to the clipboard.
+
+Options:
+  Tag Type:
+    -i                Generate <instructions> tags
+    -x                Generate <context> tags with ID
+    -p                Generate <prompt> tags with ID
+    -f [n]            Generate <file> tags, n is # of files (default: 1)
+    -e [n]            Generate <example> tags, n is # of examples (default: 1)
+    -c [n]            Generate <codebase> structure with files, n is # of files (default: 1)
+    -d [n]            Generate <document> tags within <documents>, n is # of documents (default: 1)
+
+  Path Control:
+    -l [n]            Preserve n parent directories in source paths (default: 0 - basename only)
+
+  Help:
+    -h, --help        Display this help message and exit
+
+EOF
+    exit 0
+}
+
+#------------------------------------------------------------------------------
+# Utility Functions
+#------------------------------------------------------------------------------
+# Format text with specified indentation
+indent() {
+    local content="$1"
+    local levels="$2"
+    local spaces=${(l:$((levels * 4)):: :)}
+    print -r -- "$content" | sed "s/^/$spaces/"
+}
+
+# Handle error messages and exit
+error_exit() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+# Process file paths based on depth parameter
+process_path() {
+    local filepath="$1"
+    local depth="$2"
+    
+    [[ -e "$filepath" ]] || error_exit "File does not exist: $filepath"
+    
+    local full_path
+    if ! full_path=$(realpath "$filepath" 2>/dev/null); then
+        error_exit "Failed to resolve path: $filepath"
+    fi
+    
+    if [[ $depth -eq 0 ]]; then
+        basename "$full_path"
+    else
+        echo "$full_path" | sed -E "s/^.*((\/[^/]+){${depth}})$/\1/"
+    fi
+}
+
+# Handle output to clipboard
+handle_output() {
+    local content="$1"
+    print -r -- "$content" | pbcopy
+    echo "Output copied to clipboard"
+}
+
+#------------------------------------------------------------------------------
+# XML Tag Generation
+#------------------------------------------------------------------------------
+make_xtags() {
+    local tag_type="$1"
+    local num_items="$2"
+
+    [[ -z "$tag_type" ]] && error_exit "Tag type is empty in make_xtags"
+    [[ -n "${TAG_DATA[type]}" ]] || error_exit "TAG_DATA not properly initialized"
+
+    local content=""
+    case "$tag_type" in
+        prompt)
+            content=$(cat <<EOF
+<$tag_type id="">
+$(indent "${TAG_DATA[content]}" 1)
+</$tag_type>
+EOF
+)
+            ;;
+        instructions|context|comment|feedback|question|example)
+            content=$(cat <<EOF
+<$tag_type>
+${TAG_DATA[content]}
+</$tag_type>
+EOF
+)
+            ;;
+        revision)
+            content=$(cat <<EOF
+
+<revision index="">
+$(indent "${TAG_DATA[content]}" 1)
+</revision>
+
+EOF
+)
+            ;;
+        document)
+            content="<documentation type=\"\" id=\"\">" 
+            for i in {1..$num_items}; do
+                content+=$(cat <<EOF
+
+    <document src="${TAG_DATA["source_$i"]}">
+$(indent "${TAG_DATA["content_$i"]}" 2)
+    </document>
+
+EOF
+)
+            done
+            content+=$'\n</documentation>'
+            ;;
+        codebase)
+            content="<codebase type=\"\" id=\"\">"
+            for i in {1..$num_items}; do
+                content+=$(cat <<EOF
+
+    <file src="${TAG_DATA["source_$i"]}">
+$(indent "${TAG_DATA["content_$i"]}" 2)
+    </file>
+
+EOF
+)
+            done
+            content+=$'\n</codebase>'
+            ;;
+        file)
+            content=""
+            for i in {1..$num_items}; do
+                content+=$(cat <<EOF
+
+<file src="${TAG_DATA["source_$i"]}">
+$(indent "${TAG_DATA["content_$i"]}" 1)
+</file>
+
+EOF
+)
+            done
+            ;;
+        *)
+            error_exit "Unknown tag type '$tag_type'"
+            ;;
+    esac
+
+    print -r -- "$content"
+}
+
+#------------------------------------------------------------------------------
+# Main Program Logic
+#------------------------------------------------------------------------------
 main() {
     local tag_type=""
     local num_items=1
-    local save_path=""
-    local multi_save_dir=""
+    local path_depth=0
+    local strategy=0
     
     # Check for --help option before getopts
     for arg in "$@"; do
@@ -27,56 +188,69 @@ main() {
         fi
     done
     
-    # Parse options
-    while getopts ":ixfvbd:e:c:r:s:m:th" opt; do
+    # Parse command line options
+    while getopts ":pxcziqredfbdaL:h" opt; do
         case $opt in
-            i) tag_type="instructions" ;;
+            p) tag_type="prompt" ;;
             x) tag_type="context" ;;
-            f) tag_type="repomap" ;;
-            v) tag_type="version" ;;
+            c) tag_type="comment" ;;
+            z) tag_type="feedback" ;;
+            i) tag_type="instructions" ;;
+            q) tag_type="question" ;;
+            r) tag_type="revision" ;;
+            e) tag_type="example" ;;
+            f) tag_type="file" ;;
             b) tag_type="codebase" ;;
-            d) tag_type="document"; num_items=${OPTARG:-1} ;;
-            e)
-    			tag_type="example"
-    			num_items=${OPTARG:-1}
-    			if [[ ${@[$OPTIND]} != -* && -n ${@[$OPTIND]} ]]; then
-    			    meta=${@[$OPTIND]}
-    			    OPTIND=$((OPTIND+1))
-    			else
-    			    meta=""
-    			fi
-    			;;
-            c) tag_type="code"; num_items=${OPTARG:-1} ;;
-            r) tag_type="reasoning"; num_items=${OPTARG:-1} ;;
-            s) save_path="$OPTARG" ;;
-            m) multi_save_dir="$OPTARG" ;;
-			p) # <dependencies> tag (to be implemented)
-			   ;;
-            t) # Custom tag (to be implemented)
-               ;;
+            d) tag_type="document" ;;
+            a) tag_type="documentation" ;;
+            L) path_depth=$OPTARG ;;
+            S) strategy=$OPTARG ;;
             h) usage; exit 0 ;;
             \?) error_exit "Invalid option: -$OPTARG" ;;
             :) error_exit "Option -$OPTARG requires an argument." ;;
         esac
     done
 
+    # Process arguments
     shift $((OPTIND-1))
-
-    # Check if a tag type was specified
-    [[ -z "$tag_type" ]] && error_exit "No tag type specified"
-
-    # If files are provided, process them
     if [[ $# -gt 0 ]]; then
-        fill_tags "$tag_type" "$num_items" "$@"
-        # Regenerate output with filled content
+        num_items=$#
     fi
 
-	# Generate output after filling tags
-    local output=$(make_xtags "$tag_type" "$num_items")
+    # Validate input
+    [[ -z "$tag_type" ]] && error_exit "No tag type specified"
 
-    # Handle output
-    handle_output "$output" "$save_path" "$multi_save_dir"
+    # Initialize tag data structure
+    TAG_DATA=()
+    TAG_DATA[type]="$tag_type"
+    TAG_DATA[num_items]="$num_items"
+    TAG_DATA[path_depth]="$path_depth"
+    TAG_DATA[strategy]="$strategy"
+
+    # Process input based on tag type
+    case "$tag_type" in
+        example|prompt|context|comment|feedback|instructions|question|revision)
+            TAG_DATA[content]=""
+            ;;
+        document|documentation|file|codebase)
+            for i in {1..$num_items}; do
+                if [[ $# -ge $i ]]; then
+                    local src="${argv[$i]}"
+                    TAG_DATA["full_path_$i"]=$(realpath "$src")
+                    TAG_DATA["source_$i"]=$(process_path "$src" "$path_depth")
+                    TAG_DATA["content_$i"]=$(<"$src")
+                fi
+            done
+            ;;
+        *)
+            error_exit "Unknown tag type '$tag_type'"
+            ;;
+    esac
+
+    # Generate and handle output
+    local output=$(make_xtags "$tag_type" "$num_items")
+    handle_output "$output"
 }
 
-# Run the main function
+# Execute main program
 main "$@"

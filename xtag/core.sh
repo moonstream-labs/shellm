@@ -3,10 +3,10 @@
 # Current Working Version
 
 indent() {
-    local content="$1"
-    local levels="$2"
-    local spaces=$(printf ' %.0s' {1..$((levels * 4))})
-    echo "$content" | sed "s/^/$spaces/"
+	local content="$1"
+	local levels="$2"
+	local spaces=${(l:$((levels * 4)):: :)}
+	print -r -- "$content" | sed "s/^/$spaces/"
 }
 
 # Declare TAG_STRUCTURE as a global associative array
@@ -26,13 +26,13 @@ init_tag_structure() {
         instructions|context|repomap|version|codebase)
             TAG_STRUCTURE[content]=""
             ;;
-        document|example|code)
+        document|example|file)
             for i in {1..$num_items}; do
                 TAG_STRUCTURE["source_$i"]=""
                 TAG_STRUCTURE["content_$i"]=""
             done
             if [[ "$tag_type" == "example" ]]; then
-                TAG_STRUCTURE[meta]=""
+                TAG_STRUCTURE[meta]="$meta"
             fi
             ;;
         reasoning)
@@ -62,58 +62,75 @@ make_xtags() {
     local content=""
     case "$tag_type" in
         instructions|context|repomap|codebase)
-            content="<$tag_type>\n${TAG_STRUCTURE[content]}\n</$tag_type>\n"
+            content=$(cat <<EOF
+<$tag_type>
+${TAG_STRUCTURE[content]}
+</$tag_type>
+EOF
+)
             ;;
         version)
-            content="<$tag_type>${TAG_STRUCTURE[content]}</$tag_type>\n"
+            content="<$tag_type>${TAG_STRUCTURE[content]}</$tag_type>"
             ;;
         document)
-            content="<documents>\n"
+            content="<documentation type=\"\" id=\"\">" 
             for i in {1..$num_items}; do
-                content+="    <document index=\"$i\">\n"
-                content+="        <src>${TAG_STRUCTURE["source_$i"]}</src>\n"
-                content+="        <content>\n$(indent "${TAG_STRUCTURE["content_$i"]}" 3)\n        </content>\n"
-                content+="    </document>\n"
+                content+=$(cat <<EOF
+
+    <document src="${TAG_STRUCTURE["source_$i"]}">
+$(indent "${TAG_STRUCTURE["content_$i"]}" 2)
+    </document>
+EOF
+)
             done
-            content+="</documents>\n"
+            content+=$'\n</documentation>'
             ;;
         example)
-            content="<examples>\n"
-            content+="    <meta>${TAG_STRUCTURE[meta]}\n\n    </meta>\n"
+            content="<examples>"
             for i in {1..$num_items}; do
-                content+="    <example index=\"$i\">\n"
-                content+="$(indent "${TAG_STRUCTURE["content_$i"]}" 2)\n"
-                content+="    </example>\n"
+                content+=$(cat <<EOF
+
+    <example index="$i">
+$(indent "${TAG_STRUCTURE["content_$i"]}" 2)
+    </example>
+EOF
+)
             done
-            content+="</examples>\n"
+            content+=$'\n</examples>'
             ;;
-        code)
-            content="<code>\n"
+        file)
+            content="<codebase type=\"\" id=\"\">"
             for i in {1..$num_items}; do
-                content+="    <file index=\"$i\">\n"
-                content+="        <src>${TAG_STRUCTURE["source_$i"]}</src>\n"
-                content+="        <content>\n$(indent "${TAG_STRUCTURE["content_$i"]}" 3)\n        </content>\n"
-                content+="    </file>\n"
+                content+=$(cat <<EOF
+
+    <file src="${TAG_STRUCTURE["source_$i"]}">
+$(indent "${TAG_STRUCTURE["content_$i"]}" 2)
+    </file>
+EOF
+)
             done
-            content+="</code>\n"
+            content+=$'\n</codebase>'
             ;;
         reasoning)
-            content="<reasoning>\n"
+            content="<reasoning index=\"\">"
             for i in {1..$num_items}; do
-                content+="    <step index=\"$i\">\n"
-                content+="        <thinking>\n$(indent "${TAG_STRUCTURE["thinking_$i"]}" 3)\n        </thinking>\n"
-                content+="        <planning>\n$(indent "${TAG_STRUCTURE["planning_$i"]}" 3)\n        </planning>\n"
-                content+="    </step>\n"
+                content+=$(cat <<EOF
+
+    <thinking step="$i">
+$(indent "{{THINKING}}" 2)
+    </thinking>
+EOF
+)
             done
-            content+="    <action>\n$(indent "${TAG_STRUCTURE[action]}" 2)\n    </action>\n"
-            content+="</reasoning>\n"
+			content+=$'\n    <reflection>\n        {{REFLECTION}}\n    </reflection>'
+            content+=$'\n</reasoning>'
             ;;
         *)
             error_exit "Unknown tag type '$tag_type'"
             ;;
     esac
 
-    echo -E "$content"
+    print -r -- "$content"
 }
 
 fill_tags() {
@@ -130,12 +147,12 @@ fill_tags() {
             fi
             TAG_STRUCTURE[content]=$(<"$1")
             ;;
-        document|code)
+        document|file)
             for i in {1..$num_items}; do
                 if [[ $# -ge $i ]]; then
-                    local file="${argv[$i]}"
-                    TAG_STRUCTURE["source_$i"]=$(basename "$file")
-                    TAG_STRUCTURE["content_$i"]=$(<"$file")
+                    local src="${argv[$i]}"
+                    TAG_STRUCTURE["source_$i"]=$(basename "$src")
+                    TAG_STRUCTURE["content_$i"]=$(<"$src")
                 fi
             done
             ;;
@@ -143,8 +160,8 @@ fill_tags() {
             TAG_STRUCTURE[meta]="$meta"
             for i in {1..$num_items}; do
                 if [[ $# -ge $i ]]; then
-                    local file="${argv[$i]}"
-                    TAG_STRUCTURE["content_$i"]=$(<"$file")
+                    local src="${argv[$i]}"
+                    TAG_STRUCTURE["content_$i"]=$(<"$src")
                 fi
             done
             ;;
@@ -152,12 +169,8 @@ fill_tags() {
             for i in {1..$num_items}; do
                 if [[ $# -ge $((2*i-1)) ]]; then
                     TAG_STRUCTURE["thinking_$i"]="${argv[$((2*i-1))]}"
-                    TAG_STRUCTURE["planning_$i"]="${argv[$((2*i))]}"
                 fi
             done
-            if [[ $# -ge $((2*num_items+1)) ]]; then
-                TAG_STRUCTURE[action]="${argv[$((2*num_items+1))]}"
-            fi
             ;;
         *)
             error_exit "Unknown tag type '$tag_type'"

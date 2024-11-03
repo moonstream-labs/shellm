@@ -2,6 +2,10 @@
 
 This guide provides a detailed overview of the `xtag` script, its components, and how they work together to generate XML tags and process files.
 
+## Introduction
+
+The `xtag` script is a versatile tool designed to generate various types of XML tag structures for documentation, code representation, reasoning, and more. It can process files, generate empty templates, and output the results to the clipboard or files. The script's modular design allows for easy maintenance and extension.
+
 ## File Structure
 
 The `xtag` script is composed of four main files:
@@ -21,6 +25,7 @@ The `xtag` script is the entry point of the program. It sources the other script
 
 - **Option Parsing**: Uses `getopts` to parse command-line options, setting variables for tag type, number of items, save paths, and verbosity.
 - **Main Logic**:
+  - Checks for `--help` option before parsing other options
   - Generates the tag structure using `make_xtags`
   - Processes files if provided using `fill_tags`
   - Generates output using `make_xtags` again
@@ -28,13 +33,14 @@ The `xtag` script is the entry point of the program. It sources the other script
 
 ### Execution Flow
 
-1. Sources other script files
-2. Parses command-line options
-3. Checks if a tag type was specified
-4. Generates initial tag structure
-5. Processes files if provided
-6. Generates final output
-7. Handles output (clipboard, single file, or multiple files)
+1. Checks for `--help` option
+2. Sources other script files
+3. Parses command-line options
+4. Checks if a tag type was specified
+5. Generates initial tag structure
+6. Processes files if provided
+7. Generates final output
+8. Handles output (clipboard, single file, or multiple files)
 
 ---
 
@@ -48,19 +54,21 @@ This file contains the core functions for creating and manipulating tag structur
 
 - Initializes a global associative array `TAG_STRUCTURE`
 - Sets up the structure based on the tag type and number of items
-- Handles different tag types: instructions, context, filetree, codebase, document, example, code, and reasoning
+- Handles different tag types: instructions, context, repomap, codebase, version, document, example, code, and reasoning
 
 #### `make_xtags`
 
 - Generates XML tags based on the tag structure
 - Uses a case statement to handle different tag types
 - Builds the XML structure with placeholders for content
+- Includes special handling for the `version` tag type
 
 #### `fill_tags`
 
 - Populates the tag structure with actual content from files
 - Handles different tag types and their specific requirements
 - Reads file contents and updates the `TAG_STRUCTURE` accordingly
+- Includes handling for the `version` tag type
 
 ### Execution Flow
 
@@ -88,6 +96,7 @@ This file contains utility functions and the usage information for the script.
 #### `usage`
 
 - Displays the help message with usage information and examples
+- Includes information about both `-h` and `--help` options
 
 #### `print_tag_structure`
 
@@ -95,7 +104,7 @@ This file contains utility functions and the usage information for the script.
 
 ### Usage
 
-These utility functions are used throughout the other scripts for error handling, logging, and providing user information.
+These utility functions are used throughout the other scripts for error handling, logging, and providing user information. The `usage` function can be triggered by either the `-h` or `--help` options, with `--help` taking precedence.
 
 ---
 
@@ -132,12 +141,28 @@ This file handles the output operations of the script.
 
 ## Overall Functionality
 
-The `xtag` script provides a flexible system for generating XML tag structures and processing files into these structures. It can handle various tag types, including instructions, context, documents, examples, code, and reasoning steps.
+The `xtag` script provides a flexible system for generating XML tag structures and processing files into these structures. It can handle various tag types, including instructions, context, repomap, codebase, version, documents, examples, code, and reasoning steps.
 
 The script allows users to:
 
 - Generate empty tag templates
 - Process one or more files into a tag structure
 - Save output to the clipboard, a single file, or multiple files
+- Display usage information with `-h` or `--help` options
 
 The modular design separates concerns into different files, making the code more maintainable and extensible. The core functionality of creating and manipulating tag structures is separated from the input/output operations and utility functions, allowing for easier updates and potential additions of new tag types or processing methods in the future.
+
+### Error Handling and Verbose Logging
+
+The script includes robust error handling through the `error_exit` function, which displays error messages and terminates the script when necessary. The `log_verbose` function allows for detailed logging when verbose mode is enabled, helping with debugging and providing more information about the script's execution.
+
+### Extending the Script
+
+To add a new tag type to the `xtag` script:
+
+1. Update the `init_tag_structure` function in `core.sh` to handle the new tag type.
+2. Add appropriate cases in the `make_xtags` and `fill_tags` functions to generate and populate the new tag structure.
+3. Update the option parsing in the main `xtag` script to recognize the new tag type.
+4. Update the `usage` function in `utils.sh` to include information about the new tag type and its usage.
+
+This modular approach allows for easy extension of the script's capabilities while maintaining its overall structure and functionality.
