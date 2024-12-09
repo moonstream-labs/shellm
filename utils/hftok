@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+import sys
+import os
+from pathlib import Path
+from typing import List, Optional, Dict, Tuple
+import json
+import typer
+from tokenizers import Tokenizer
+from rich.console import Console
+
+# Version
+VERSION = "0.1.0"
+
+# Initialize console for stdout and stderr
+console = Console()
+error_console = Console(stderr=True)
+
+# Config handling
+CONFIG_DIR = Path.home() / '.hftok'
+CONFIG_FILE = CONFIG_DIR / 'config.json'
+
+DEFAULT_CONFIG = {
+    "models": {
+        "deepseek": str(CONFIG_DIR / "tokenizers/deepseek/tokenizer.json"),
+        "llama": str(CONFIG_DIR / "tokenizers/llama/tokenizer.json"),
+        "qwen": str(CONFIG_DIR / "tokenizers/qwen/tokenizer.json"),
+        "voyage": str(CONFIG_DIR / "tokenizers/voyage/voyage-3/tokenizer.json"),
+        "voyage-code": str(CONFIG_DIR / "tokenizers/voyage/voyage-code-3/tokenizer.json")
+    },
+    "default_model": "llama"
+}
+
+def expand_path(path_str: str) -> Path:
+    """Expand ~ and environment variables in path."""
+    return Path(os.path.expanduser(os.path.expandvars(path_str)))
+
+def ensure_config() -> Dict:
+    """Create or load config file."""
+    if not CONFIG_DIR.exists():
+        CONFIG_DIR.mkdir(parents=True)
+    
+    if not CONFIG_FILE.exists():
+        CONFIG_FILE.write_text(json.dumps(DEFAULT_CONFIG, indent=2))
+        
+    try:
+        return json.loads(CONFIG_FILE.read_text())
+    except Exception as e:
+        error_console.print(f"[red]Error loading config: {str(e)}")
+        raise typer.Exit(1)
+
+def load_tokenizer(model: str, config: Dict) -> Tokenizer:
+    """Load tokenizer for specified model from config."""
+    try:
+        tokenizer_path = config["models"].get(model)
+        if not tokenizer_path:
+            error_console.print(f"[red]Model '{model}' not found in config")
+            raise typer.Exit(1)
+            
+        path = expand_path(tokenizer_path)
+        if not path.exists():
+            error_console.print(f"[red]Tokenizer file not found: {path}")
+            raise typer.Exit(1)
+            
+        return Tokenizer.from_file(str(path))
+    except Exception as e:
+        error_console.print(f"[red]Error loading tokenizer: {str(e)}")
+        raise typer.Exit(1)
+
+def get_input_text(input_file: Optional[Path], args: List[str]) -> Tuple[str, bool]:
+    """Get input text and whether it's from CLI arguments."""
+    if input_file:
+        try:
+            return input_file.read_text(encoding='utf-8'), False
+        except Exception as e:
+            error_console.print(f"[red]Error reading file: {str(e)}")
+            raise typer.Exit(1)
+    
+    if not sys.stdin.isatty():
+        return sys.stdin.read(), False
+    
+    if args:
+        return ' '.join(args), True
+    
+    error_console.print("[red]No input provided.")
+    raise typer.Exit(1)
+
+def version_callback(value: bool):
+    if value:
+        typer.echo(f"hftok version {VERSION}")
+        raise typer.Exit()
+
+def main(
+    text: Optional[List[str]] = typer.Argument(
+        None, 
+        help="The text to process",
+        show_default=False
+    ),
+    input: Optional[Path] = typer.Option(
+        None, 
+        "--input", "-i", 
+        help="Read input from a file instead of arguments or stdin"
+    ),
+    truncate: Optional[int] = typer.Option(
+        None, 
+        "--truncate", "-t", 
+        help="[green]Truncate output to specified number of tokens[/green]",
+        show_default=False
+    ),
+    model: Optional[str] = typer.Option(
+        None, 
+        "--model", "-m", 
+        help="[blue]Tokenizer model to use[/blue] ([italic]defaults to config[/italic])"
+    ),
+    encode: bool = typer.Option(
+        False, 
+        "--encode", "-e", 
+        help="Output token IDs instead of count"
+    ),
+    decode: bool = typer.Option(
+        False, 
+        "--decode", "-d", 
+        help="Convert token IDs back to text"
+    ),
+    tokens: bool = typer.Option(
+        False, 
+        "--tokens", 
+        help="Show detailed token information"
+    ),
+    allow_special: bool = typer.Option(
+        False, 
+        "--allow-special", 
+        help="[yellow]Allow special tokens in input[/yellow]"
+    ),
+    version: Optional[bool] = typer.Option(
+        None,
+        "--version",
+        callback=version_callback,
+        is_eager=True,
+        help="Show version and exit",
+    ),
+):
+    """[bold]Count and analyze text using HuggingFace tokenizers[/bold]
+
+    This tool provides token counting, encoding, and analysis using local HuggingFace tokenizer files.
+    It supports multiple input methods and various tokenizer models.
+
+    [bold green]Basic Usage:[/bold green]
+    
+    \b
+    Count tokens from arguments:
+        $ hftok "Hello world"
+        > 3
+
+    Count tokens from a file:
+        $ hftok -i input.txt
+        > 42
+
+    Count tokens from stdin:
+        $ echo "Test text" | hftok
+        > 2
+
+    [bold blue]Working with Models:[/bold blue]
+
+    \b
+    Use specific model:
+        $ hftok -m llama "Test" 
+
+    Available models:
+    [dim]  • deepseek    - DeepSeek base tokenizer
+      • llama       - Llama 2 tokenizer
+      • qwen        - Qwen tokenizer
+      • voyage      - Voyage base tokenizer
+      • voyage-code - Voyage code tokenizer[/dim]
+
+    [bold yellow]Advanced Features:[/bold yellow]
+
+    \b
+    Truncate output:
+        $ hftok -t 100 "Long text..."        [dim]# Limit to 100 tokens[/dim]
+
+    Show token IDs:
+        $ hftok --encode "Hello"             [dim]# Get integer token IDs[/dim]
+
+    Convert IDs to text:
+        $ hftok --decode "101 1045 2293"     [dim]# Decode token IDs[/dim]
+
+    See token details:
+        $ hftok --tokens "Test"              [dim]# Show detailed token info[/dim]
+
+    Handle special tokens:
+        $ hftok --allow-special "<|end|>"    [dim]# Allow special tokens[/dim]
+    """
+    config = ensure_config()
+    model_name = model or config.get("default_model")
+    
+    if not model_name:
+        error_console.print("[red]No model specified and no default model in config")
+        raise typer.Exit(1)
+    
+    tokenizer = load_tokenizer(model_name, config)
+    
+    if decode:
+        try:
+            # When decoding, treat input as space-separated token IDs
+            text_input, is_args = get_input_text(input, text)
+            token_ids = [int(t) for t in text_input.split()]
+            result = tokenizer.decode(token_ids)
+            typer.echo(result)
+            return
+        except ValueError:
+            error_console.print("[red]Error: Invalid token IDs. Provide space-separated integers.")
+            raise typer.Exit(1)
+    
+    # Get input text
+    text_input, is_args = get_input_text(input, text)
+    
+    # Handle encoding
+    try:
+        encoding = tokenizer.encode(text_input)
+    except Exception as e:
+        if not allow_special and "special token" in str(e).lower():
+            error_console.print("[red]Error: Special tokens found. Use --allow-special to process anyway.")
+            raise typer.Exit(1)
+        raise
+    
+    if truncate:
+        encoding.truncate(truncate)
+    
+    # Handle output modes
+    if encode:
+        typer.echo(' '.join(str(i) for i in encoding.ids))
+    elif tokens:
+        # Match ttok output format for tokens
+        token_bytes = [t.encode('utf-8') for t in encoding.tokens]
+        typer.echo(str(token_bytes))
+    else:
+        # Default mode - just count tokens
+        typer.echo(len(encoding.ids))
+
+if __name__ == "__main__":
+    typer.run(main)

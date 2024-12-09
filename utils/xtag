@@ -1,0 +1,508 @@
+#!/bin/zsh
+
+# xtag - XML Tag Generation Utility
+
+#------------------------------------------------------------------------------
+# Core Functions & Error Handling
+#------------------------------------------------------------------------------
+
+set -eo pipefail
+
+# Help and Usage Information
+usage() {
+    cat << EOF
+Usage: xtag [options] [file ...]
+
+Description:
+    A flexible XML tag generation utility that supports custom and predefined tag structures,
+    attribute handling, and nested tag generation.
+
+Options:
+    -t <type>       Specify tag type (required)
+                    Uses predefined types from config or creates custom tag
+    
+    -a <attrs>      Define custom attributes
+                    Multiple attributes can be provided until -- or next option
+    
+    -v <values>     Specify values for attributes
+                    Special markers:
+                    @  Use source file path as value
+                    _  Use empty value
+                    Must match number of attributes
+                    
+    -L <depth>      Specify path depth for file paths
+                    0: filename only (default)
+                    n: include n parent directories
+    
+    -C <spaces>     Set content indentation
+                    Number of spaces for content indentation
+                    Exports XTAG_DEFAULT_CONTENT_SPACES for nested calls
+    
+    -T <spaces>     Set tag indentation
+                    Number of spaces for tag indentation
+                    Exports XTAG_DEFAULT_TAG_SPACES for nested calls
+    
+    -H              Hide attributes in output
+    
+    -S              Generate self-closing tags
+
+Subcommands:
+    config          Display current configuration file
+
+Examples:
+    # Basic tag with content from files
+    xtag -t file file1.txt file2.txt
+    
+    # Custom attributes and values
+    xtag -t link -a href title -v example.com "My Link" -- file.txt
+    
+    # Using file paths in attributes
+    xtag -t file -a src type -v @ txt -- data.txt
+    
+    # Nested tag structures
+    xtag -t docs <(xtag -t file file1.txt file2.txt)
+    
+    # Custom indentation
+    xtag -t outer -C 4 <(xtag -t inner -C 2 file.txt)
+    
+    # Path depth in attributes
+    xtag -t file -L 2 -a src -v @ -- /path/to/file.txt
+    
+    # Multiple empty values with path
+    xtag -t custom -a id type src -v _ _ @ -- file.txt
+
+Indentation:
+    Content and tag indentation can be controlled at both the command and
+    environment level:
+    
+    - Command-level: -C and -T options set indentation for current execution
+    - Environment-level: XTAG_DEFAULT_CONTENT_SPACES and XTAG_DEFAULT_TAG_SPACES
+      variables affect all executions unless overridden
+    
+    When used in nested commands, parent indentation settings are exported to
+    child processes but can be overridden with -C and -T options.
+
+Configuration:
+    Predefined tag types are stored in config.yaml with their default
+    attributes. Custom tags can be created with the -t option.
+    
+    View current configuration:
+    xtag config
+
+Input/Output:
+    - Reads from files or stdin
+    - Outputs to stdout (can be redirected with standard shell operators)
+    - Supports process substitution for nested tag structures
+EOF
+}
+
+# Error handling
+error_exit() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+#------------------------------------------------------------------------------
+# Configuration & Session State
+#------------------------------------------------------------------------------
+
+DEBUG=0 source "${XDG_CONFIG_HOME:-$HOME/.local/bin}/debug"
+
+# Initialize global session state
+typeset -A session_data=(
+    # Core settings
+    [config_path]="${XDG_CONFIG_HOME:-$HOME/.config}/xtag/config.yaml"
+    [max_file_size]="${XTAG_MAX_FILE_SIZE:-10485760}"  # 10MB default
+    [tag_type]=""
+    [num_items]=0
+
+    # Content formatting
+    [content_spaces]="${XTAG_DEFAULT_CONTENT_SPACES:-4}"
+    [tag_spaces]="${XTAG_DEFAULT_TAG_SPACES:-0}"
+    [custom_attrs]=false
+    [hide_attrs]=false
+    [self_closing]=false
+
+	# Stdin handling
+	[using_stdin]=false
+    [stdin_content]=""
+    [stdin_src]="-"
+
+	# Path Handling
+	[path_marker]="@"      # Marker for file path
+    [empty_marker]="_"    # Marker for empty value
+    [path_depth]=0
+)
+
+# `xtag config` subcommand handling (needs to run before main)
+if [[ "${1:-}" == "config" ]]; then
+    [[ -f "${session_data[config_path]}" ]] || error_exit "Config file not found: ${session_data[config_path]}"
+    bat --language=yaml "${session_data[config_path]}"
+    exit 0
+fi
+
+init_config() {
+    local tag_type="$1"
+    local config_file="${session_data[config_path]}"
+    
+    debug 2 "Initializing config for tag_type: $tag_type"
+    debug 2 "Using config file: $config_file"
+    
+    # Check if tag exists in config file
+	if ! yq -e ".tags[\"$tag_type\"]" "$config_file" >/dev/null 2>&1; then
+        debug 2 "Tag '$tag_type' not found in config, using custom template"
+        # Tag doesn't exist - create new YAML structure
+        yq ".tags.custom | .tag = \"$tag_type\"" "$config_file"
+    else
+        debug 2 "Found existing configuration for tag: $tag_type"
+        # Tag exists - retrieve existing configuration
+        yq ".tags[\"$tag_type\"]" "$config_file"
+    fi
+}
+
+#------------------------------------------------------------------------------
+# I/O & Data Processing
+#------------------------------------------------------------------------------
+
+process_attributes() {
+    local yaml="$1"
+    shift
+    local -a attrs=("$@")
+    
+    debug 1 "Processing attributes: ${attrs[@]}"
+    
+    if [[ ${#attrs[@]} -gt 0 ]]; then
+        debug 2 "Converting attributes to YAML format"
+        local items=$(printf '"%s",' "${attrs[@]}")
+        local attr_expr="[${items%,}]"
+        echo "$yaml" | yq ".attr = $attr_expr"
+    else
+        debug 2 "No attributes to process"
+        echo "$yaml"
+    fi
+}
+
+process_values() {
+    local yaml="$1"
+    shift
+    local -a values=("$@")
+    
+    debug 1 "Processing values: ${values[@]}"
+    
+    if [[ ${#values[@]} -gt 0 ]]; then
+        local attr_count=$(echo "$yaml" | yq '.attr | length')
+        debug 2 "Attribute count: $attr_count"
+        [[ ${#values[@]} -le $attr_count ]] || error_exit "Too many values for attributes"
+        
+        # Convert special markers to a temporary placeholder
+        local -a processed_values=()
+        for value in "${values[@]}"; do
+            case "$value" in
+                ${session_data[path_marker]})
+                    processed_values+=("AWAIT_PATH")
+                    ;;
+                ${session_data[empty_marker]})
+                    processed_values+=("")
+                    ;;
+                *)
+                    processed_values+=("$value")
+                    ;;
+            esac
+        done
+        
+        local items=$(printf '"%s",' "${processed_values[@]}")
+        local value_expr="[${items%,}]"
+        echo "$yaml" | yq ".values = $value_expr"
+    else
+        debug 2 "No values to process"
+        echo "$yaml"
+    fi
+}
+
+process_stdin() {
+    debug 1 "Processing stdin..."
+    local content=""
+    while IFS= read -r line; do
+        content+="$line"$'\n'
+    done
+    # Remove the trailing newline
+    content="${content%$'\n'}"
+    session_data[stdin_content]="$content"
+    session_data[using_stdin]=true
+    debug 2 "Stdin content captured: $content"
+}
+
+process_input() {
+    debug 1 "Processing input..."
+    if [[ -p /dev/stdin ]]; then
+        debug 2 "Reading from stdin pipe..."
+        process_stdin
+    elif [[ "$1" == "-" ]]; then
+        debug 2 "Reading from explicit stdin marker..."
+        process_stdin
+    else
+        debug 2 "Loading from source files..."
+        load_src "$@"
+    fi
+}
+
+load_src() {
+    local num_items=${session_data[num_items]}
+    debug 2 "Loading $num_items source files..."
+	local path_depth=${session_data[path_depth]}
+    
+    if [[ $# -ge 1 ]]; then
+        for i in {1..$num_items}; do
+            local src="$1"
+            debug 3 "Processing source file $i: $src"
+            session_data[full_path_$i]=$(realpath "$src")
+			debug 3 "Source path: ${session_data[full_path_$i]}"
+            session_data[src_$i]=$(process_path "$src" "$path_depth")
+			debug 3 "Processed path: ${session_data[src_$i]}"
+            session_data[content_$i]=$(<"$src")
+            shift
+        done
+    else
+        echo "No source files provided, initializing empty content"
+        for i in {1..$num_items}; do
+            session_data[src_$i]=""
+            session_data[content_$i]=""
+        done
+    fi
+}
+
+process_path() {
+    local filepath="$1"
+    local depth="$2"
+	local new_path=""
+    
+    [[ -e "$filepath" ]] || error_exit "File does not exist: $filepath"
+    
+    local full_path
+    if ! full_path=$(realpath "$filepath" 2>/dev/null); then
+        error_exit "Failed to resolve path: $filepath"
+    fi
+    
+    if [[ $depth -eq 0 ]]; then
+        new_path=$(basename "$full_path")
+		echo "$new_path"
+		debug 3 "New path: $new_path"
+    else
+		new_path=$(echo "$full_path" | sed -E "s/^.*((\/[^/]+){${depth}})$/\1/")
+		echo "$new_path"
+		debug 3 "New path: $new_path"
+    fi
+}
+
+#------------------------------------------------------------------------------
+# Tag Generation
+#------------------------------------------------------------------------------
+generate_tag() {
+    local yaml="$1"
+    local content="${2:-}"
+    local src_path="${3:-}"
+    
+    debug 1 "Generating tag..."
+    debug 2 "New YAML config: $yaml"
+    debug 2 "Tag path: $src_path"
+
+    # Unpack needed session variables
+    local content_spaces=${session_data[content_spaces]}
+    local tag_spaces=${session_data[tag_spaces]}
+    local hide_attrs=${session_data[hide_attrs]}
+    local self_closing=${session_data[self_closing]}
+    
+    # Calculate indentation
+    local tag_indent=""
+    local content_indent=""
+    [[ $tag_spaces -gt 0 ]] && tag_indent=$(printf "%${tag_spaces}s" "")
+    [[ $content_spaces -gt 0 ]] && content_indent=$(printf "%${content_spaces}s" "")
+    
+    # Evaluate YAML to shell variables at function scope
+    eval "$(yq -o=shell '.' <<<"$yaml")"
+    
+    # Process attributes if enabled
+    local attr_str=""
+    if [[ $hide_attrs == false ]]; then
+        local attr_count=$(echo "$yaml" | yq '.attr | length')
+        local attr_index=$(($attr_count - 1))
+        
+        for ((i=0; i<=attr_index; i++)); do
+            local attr="attr_$i"
+            local value="values_$i"
+            
+            # Check for path placeholder
+            if [[ "${(P)value}" == "AWAIT_PATH" && -n "$src_path" ]]; then
+                attr_str+=" ${(P)attr}=\"$src_path\""
+            else
+                attr_str+=" ${(P)attr}=\"${(P)value}\""
+            fi
+        done
+    fi
+    
+	# Generate tag with proper indentation
+	if [[ $self_closing == true ]]; then
+		printf "%s<%s%s />\n" \
+			"$tag_indent" "$tag" "$attr_str"
+	else
+		# Add indentation to each line of content
+		local indented_content=""
+		while IFS= read -r line; do
+			indented_content+="$content_indent$line"$'\n'
+		done < <(print -r -- "$content")
+		
+		# Remove trailing newline to avoid extra blank line
+		indented_content="${indented_content%$'\n'}"
+		
+		printf "%s<%s%s>\n%s\n%s</%s>\n" \
+			"$tag_indent" "$tag" "$attr_str" \
+			"$indented_content" \
+			"$tag_indent" "$tag"
+	fi
+}
+
+#------------------------------------------------------------------------------
+# Main Execution
+#------------------------------------------------------------------------------
+
+main() {
+
+    debug 1 "Starting xtag execution..."
+    local -a attr_args=()
+    local -a value_args=()
+    
+    debug 2 "Processing command line options..."
+    # Process options
+    while getopts "t:a:v:L:C:T:HS" opt; do
+        case $opt in
+            t)
+                debug 1 "Setting tag type: $OPTARG"
+                session_data[tag_type]="$OPTARG" 
+                ;;
+			a)
+				debug 1 "Setting attribute arguments"
+				attr_args+=("$OPTARG")
+				shift $((OPTIND-1))
+				session_data[custom_attrs]=true
+				while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
+					# Stop processing attributes if we hit --
+					[[ "$1" == "--" ]] && {
+						shift
+						break
+					}
+					attr_args+=("$1")
+					shift
+				done
+				debug 1 "Attribute arguments: ${attr_args[@]}"
+				OPTIND=1
+            ;;
+            v)
+				debug 1 "Setting value arguments"
+                value_args+=("$OPTARG")
+                shift $((OPTIND-1))
+                while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
+					[[ "$1" == "--" ]] && {
+						shift
+						break
+					}
+                    value_args+=("$1")
+                    shift
+                done
+				debug 1 "Value arguments: ${value_args[@]}"
+                OPTIND=1
+                ;;
+            L) session_data[path_depth]="$OPTARG" ;;
+			C)
+				[[ -n "$OPTARG" ]] && {
+					session_data[content_spaces]="$OPTARG"
+					export XTAG_DEFAULT_CONTENT_SPACES="$OPTARG"
+				} || session_data[content_spaces]=0
+				;;
+			T)
+				[[ -n "$OPTARG" ]] && {
+					session_data[tag_spaces]="$OPTARG"
+					export XTAG_DEFAULT_TAG_SPACES="$OPTARG"
+				} || session_data[tag_spaces]=0
+				;;
+            H) session_data[hide_attrs]=true ;;
+            S) session_data[self_closing]=true ;;
+            *) usage ;;
+        esac
+    done
+    
+	# Process arguments
+	shift $((OPTIND-1))
+	debug 2 "After OPTIND shift: $# arguments remaining: $@"
+
+	if [[ "$1" == "--" ]]; then
+		shift
+		debug 2 "After -- shift: $# arguments remaining: $@"
+	fi
+
+	# Set num_items if we have file arguments (excluding '-')
+	if [[ $# -ge 1 ]]; then                    # Changed to -ge 1
+		debug 2 "Entering file count loop..."
+		# Count actual files (excluding '-')
+		if [[ "$arg" != "-" ]]; then
+			session_data[num_items]="$#"
+			debug 3 "Incremented count for: $arg"
+		fi
+		debug 2 "File counting complete. Count: ${session_data[num_items]}"
+	fi
+    
+    debug 3 "  config_path: ${session_data[config_path]}"
+    debug 3 "  max_file_size: ${session_data[max_file_size]}"
+    debug 3 "  output_type: ${session_data[output_type]}"
+    debug 3 "  output_target: ${session_data[output_target]}"
+    debug 3 "  self_closing: ${session_data[self_closing]}"
+    debug 3 "  path_depth: ${session_data[path_depth]}"
+    debug 3 "  num_items: ${session_data[num_items]}"
+    debug 3 "  tag_type: ${session_data[tag_type]}"
+    debug 3 "  custom_attrs: ${session_data[custom_attrs]}"
+    debug 3 "  hide_attrs: ${session_data[hide_attrs]}"
+    debug 3 "  save_config: ${session_data[save_config]}"
+    debug 3 "  content_spaces: ${session_data[content_spaces]}"
+    debug 3 "  tag_spaces: ${session_data[tag_spaces]}"
+    
+    debug 1 "Initializing tag configuration..."
+    local config=$(init_config "${session_data[tag_type]}")
+    debug 2 "Tag configuration: $config"
+
+    # Tag data processing
+    if [[ ${#attr_args[@]} -gt 0 && ${session_data[num_items]} -eq 0 ]]; then
+        config=$(process_attributes "$config" "${attr_args[@]}")
+        config=$(process_values "$config" "${value_args[@]}")
+		debug 2 "New configuration: $config"
+    elif [[ ${#attr_args[@]} -gt 0 && ${session_data[num_items]} -gt 0 ]]; then
+        config=$(process_attributes "$config" "${attr_args[@]}")
+        config=$(process_values "$config" "${value_args[@]}")
+		debug 2 "New configuration: $config"
+		process_input "$@"
+    elif [[ ${session_data[custom_attrs]} == false && ${session_data[num_items]} -gt 0 ]]; then
+        # Need to implement yq logic here
+        process_input "$@"
+    elif [[ ${session_data[num_items]} -gt 0 || -p /dev/stdin ]]; then
+        process_input "$@"
+    fi
+
+	# Generate output
+	local result=""
+	if [[ ${session_data[using_stdin]} == true ]]; then
+		# Use stdin content
+		result=$(generate_tag "$config" "${session_data[stdin_content]}" "${session_data[stdin_src]}")
+	elif [[ -n "${session_data[num_items]}" && ${session_data[num_items]} -gt 0 ]]; then
+		# Process file inputs
+		for i in {1..${session_data[num_items]}}; do
+			local content_var="content_$i"
+			local src_var="src_$i"
+			result+=$(generate_tag "$config" "${session_data[$content_var]}" "${session_data[$src_var]}")$'\n'
+		done
+	else
+		# No input - generate empty tag
+		result=$(generate_tag "$config" "")
+	fi
+	print -r -- "$result"
+}
+
+# Execute main program
+main "$@"

@@ -1,0 +1,57 @@
+tags:
+  prompt:
+    tag: prompt
+    attr: ['type']
+    values: []
+  context:
+    tag: context
+    attr: ['id']
+    values: []
+  feedback:
+    tag: feedback
+    attr: ['id']
+    values: []
+  instructions:
+    tag: instructions
+    attr: ['id']
+    values: []
+  question:
+    tag: question
+    attr: ['id']
+    values: []
+  revision:
+    tag: revision
+    attr: ['id']
+    values: []
+  example:
+    tag: example
+    attr: ['id']
+    values: []
+  link:
+    tag: link
+    attr: ['href', 'id']
+    values: []
+  file:
+    tag: file
+    attr: ['src']
+    values: []
+  document:
+    tag: document
+    attr: ['src', 'type']
+    values: []
+  docs:
+    tag: documentation
+    attr: ['type', 'id']
+    values: []
+  codebase:
+    tag: codebase
+    attr: ['type', 'id']
+    values: []
+  references:
+    tag: references
+    attr: ['id']
+    values: []
+  custom:
+    tag: ''
+    attr: []
+    values: []
