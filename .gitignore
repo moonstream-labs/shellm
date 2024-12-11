@@ -6,5 +6,11 @@
 .DS_Store
 
 tests
+<<<<<<< HEAD
+||||||| parent of b551c7d (🚀)
+
+config/*
+=======
 
 config/
+>>>>>>> b551c7d (🚀)
